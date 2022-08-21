@@ -1,5 +1,10 @@
 # fastapi_practice2
 
+## preparation
+
+- MongoDB setup
+- setup .env file
+
 ## run
 
 ```shell

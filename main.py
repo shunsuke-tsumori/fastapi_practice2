@@ -1,8 +1,12 @@
 from fastapi import FastAPI
 
+from routers import route_todo
+from schemas import SuccessMsg
+
 app = FastAPI()
+app.include_router(route_todo.router)
 
 
-@app.get("/")
-def read_root():
-    return {"message": "hello work"}
+@app.get("/", response_model=SuccessMsg)
+def root():
+    return SuccessMsg(message="hello work")
