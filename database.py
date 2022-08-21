@@ -3,6 +3,9 @@ from typing import Union
 import motor.motor_asyncio
 from bson import ObjectId
 from decouple import config
+from fastapi import HTTPException, status
+
+from auth_utils import AuthJwtCsrf
 
 MONGO_API_KEY = config("MONGO_API_KEY")
 
@@ -10,6 +13,7 @@ client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_API_KEY)
 database = client.fa
 collection_todo = database.todo
 collection_user = database.user
+auth = AuthJwtCsrf()
 
 
 def todo_serializer(todo) -> dict:
@@ -17,6 +21,13 @@ def todo_serializer(todo) -> dict:
         "id": str(todo["_id"]),
         "title": todo["title"],
         "description": todo["description"]
+    }
+
+
+def user_serializer(user) -> dict:
+    return {
+        "id": str(user["_id"]),
+        "email": user["email"],
     }
 
 
@@ -61,3 +72,28 @@ async def db_delete_todo(id: str) -> bool:
         if deleted_todo.deleted_count > 0:
             return True
     return False
+
+
+async def db_signup(data: dict) -> dict:
+    email = data.get("email")
+    password = data.get("password")
+    overlap_user = await collection_user.find_one({"email": email})
+    if overlap_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is already taken")
+    if not password or len(password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password too short")
+    user = await collection_user.insert_one({"email": email, "password": auth.generate_hash_pw(password)})
+    new_user = await collection_user.find_one({"_id": user.inserted_id})
+    return user_serializer(new_user)
+
+
+async def db_login(data: dict) -> str:
+    email = data.get("email")
+    password = data.get("password")
+    user = await collection_user.find_one({"email": email})
+    if not user or not auth.verify_pw(password, user["password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        )
+    token = auth.encode_jwt(user["email"])
+    return token
